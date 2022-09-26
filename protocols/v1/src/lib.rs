@@ -438,7 +438,7 @@ pub trait IsClient {
             _ => {
                 // TODO check if version_bits is set
                 if self.last_notify().is_none() {
-                    // Err(())
+                    // Err(Error::InvalidState("Not yet notified"))
                     panic!("TODO: Check if version_bits is set");
                 } else if self.is_authorized(&user_name) {
                     Ok(client_to_server::Submit {
