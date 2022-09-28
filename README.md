@@ -518,12 +518,11 @@ bitcoind as the template provider. The mining-proxy role is a proxy which allows
 mining-device via noise handshake protocol.
 
 ```mermaid
-graph LR;
+graph TD;
     A[mining-device] --sv2--> B(34255:mining-proxy);
     B --sv2/encrypted--> C(34254:pool);
     C --> D(8442:template provider/bitcoind);
 ```
-mining-device -sv2-> mining-proxy -encrypted sv2-> pool <-Template provider (bitcoind)
 
 
 ### Clone and build core
