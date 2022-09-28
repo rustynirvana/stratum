@@ -46,6 +46,7 @@ the Bitcoin network.
     - [4.02 test](#402-test)
     - [4.03 run](#403-run)
   - [5. Branches](#5-branches)
+  - [6. Demo](#6-demo)
 
 ## 1. Goals
 
@@ -509,3 +510,33 @@ binary - for example from the table below to run the interop-cpp test you'd run 
 - main - the main branch with the latest
 - POCRegtest-1-0-0 - Deprecated POC branch
 - sv2-tp-crates - Subset of main which contains only the files needed by core to implement the template provider
+
+## 6. Demo
+This demo runs the following binaries from roles/v2:
+pool, mining-proxy, and the test-utils/mining-device to simulate a miner. It also uses a branch of 
+bitcoind as the template provider. The mining-proxy role is a proxy which allows the pool to communicate with the 
+mining-device via noise handshake protocol.
+
+```mermaid
+graph LR;
+    A[mining-device] --sv2--> B(34255:mining-proxy);
+    B --sv2/encrypted--> C(34254:pool);
+    C --> D(8442:template provider/bitcoind);
+```
+mining-device -sv2-> mining-proxy -encrypted sv2-> pool <-Template provider (bitcoind)
+
+
+### Clone and build core
+
+1. clone https://github.com/ccdle12/bitcoin/ and checkout `2022.09.08-add-sv2-template-provider`
+2. do `./autogen.sh && ./configure --enable-template-provider`
+3. do `make`
+
+### Start and initialize bitcoind
+4. start bitcoind with `./src/bitcoind -regtest`
+5. create **at least 16 blocks** with `./src/bitcoin-cli -regtest generatetoaddress 16 bcrt1qttuwhmpa7a0ls5kr3ye6pjc24ng685jvdrksxx`
+
+### Start pool proxy and mining-device
+6. go on the root of this repo start the pool with `cargo run -p pool -- -c roles/v2/pool/pool-config.toml`
+7. start the proxy with `cd ./roles/v2/mining-proxy` then `cargo run`
+8. start the mining-device with `cargo run -p mining-device`
