@@ -205,7 +205,7 @@ where L::Target: Logger, L: Sync
             request_id,
             target,
             channel_id,
-            extranonce_size: 128,
+            extranonce_size: 16,
             extranonce_prefix: extended.try_into().unwrap(),
         };
         Ok(SendTo::Respond(Mining::OpenExtendedMiningChannelSuccess(
