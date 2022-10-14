@@ -723,7 +723,7 @@ impl<L: 'static + Deref + Debug + Send> Pool<L> where L::Target: Logger, L: Sync
             )),
             last_new_prev_hash: None,
             extranonces: Arc::new(Mutex::new(ExtendedExtranonce::new(
-                range_0, range_1, range_2, 32,
+                range_0, range_1, range_2,
             ))),
             solution_sender,
             new_template_processed: false,
