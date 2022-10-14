@@ -11,6 +11,9 @@ use roles_logic_sv2::{
     utils::Mutex,
 };
 use std::{convert::TryInto, sync::Arc};
+use std::fmt::Debug;
+use std::ops::Deref;
+use logging::Logger;
 
 // [h/s] Expected hash rate of the device (or cumulative hashrate on the
 // channel if multiple devices are connected downstream) in h/s.
@@ -36,7 +39,9 @@ pub fn u256_to_uint_256(v: U256<'static>) -> Uint256 {
     Uint256([d, c, b, a])
 }
 
-impl ParseDownstreamMiningMessages<(), NullDownstreamMiningSelector, NoRouting> for Downstream {
+impl<L: Deref + Debug + Send> ParseDownstreamMiningMessages<(), NullDownstreamMiningSelector, NoRouting> for Downstream<L>
+where L::Target: Logger, L: Sync
+{
     fn get_channel_type(&self) -> SupportedChannelTypes {
         SupportedChannelTypes::GroupAndExtended
     }
