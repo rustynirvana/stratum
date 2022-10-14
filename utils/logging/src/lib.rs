@@ -15,6 +15,7 @@
 //! Each module may have its own Logger or share one.
 
 use core::{cmp, fmt};
+use std::fmt::Debug;
 
 static LOG_LEVEL_NAMES: [&str; 6] = ["GOSSIP", "TRACE", "DEBUG", "INFO", "WARN", "ERROR"];
 
@@ -124,6 +125,14 @@ pub trait Logger {
     /// Logs the `Record`
     fn log(&self, record: &Record);
 }
+
+// Make Logger implement fmt::Debug, so that it can be used in #[derive(Debug)]
+impl Debug for dyn Logger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.pad("Logger")
+    }
+}
+
 
 /// Wrapper for logging byte slices in hex format.
 #[doc(hidden)]

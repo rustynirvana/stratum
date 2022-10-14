@@ -24,6 +24,19 @@ async fn server_pool_listen(listener: TcpListener) {
 }
 
 async fn new_client(name: String, test_count: u32, socket: SocketAddr) {
+    // Retry connection with 1 second delay until successful
+    let mut stream = loop {
+        match TcpStream::connect(socket).await {
+            Ok(stream) => break stream,
+            Err(_) => {
+                println!("CLIENT - Failed to connect to server, retrying in 1 second");
+                sleep(time::Duration::from_secs(1));
+            }
+        }
+    };
+
+
+
     let stream = loop {
         match TcpStream::connect(socket).await {
             Ok(st) => break st,

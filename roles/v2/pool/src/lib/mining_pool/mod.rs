@@ -13,6 +13,8 @@ use bitcoin::{
     TxMerkleNode,
 };
 use codec_sv2::Frame;
+use logging::{log_given_level, log_info, log_internal, Level, Logger, Record};
+
 use roles_logic_sv2::{
     common_properties::{CommonDownstreamData, IsDownstream, IsMiningDownstream},
     errors::Error,
@@ -25,6 +27,9 @@ use roles_logic_sv2::{
     utils::{merkle_root_from_path, Id, Mutex},
 };
 use std::{collections::HashMap, convert::TryInto, sync::Arc};
+use std::fmt::Debug;
+use std::ops::Deref;
+use std::sync::{MutexGuard, PoisonError};
 
 pub fn u256_to_block_hash(v: U256<'static>) -> BlockHash {
     let hash: [u8; 32] = v.to_vec().try_into().unwrap();
@@ -254,7 +259,7 @@ pub struct ExtendedJob {
 }
 
 #[derive(Debug)]
-pub struct Downstream {
+pub struct Downstream<L: 'static + Deref + Debug + Send> where L::Target: Logger, L: Sync {
     // Either group or channel id
     id: u32,
     receiver: Receiver<EitherFrame>,
@@ -273,14 +278,15 @@ pub struct Downstream {
     // (job,template_id)
     last_valid_extended_job: Option<(NewExtendedMiningJob<'static>, u64)>,
     solution_sender: Sender<SubmitSolution<'static>>,
+    logger: Arc<L>,
 }
 
 /// Accept downstream connection
-pub struct Pool {
+pub struct Pool<L: 'static + Deref + Debug + Send> where L::Target: Logger, L: Sync {
     /// Downstreams that are not HOM
-    group_downstreams: HashMap<u32, Arc<Mutex<Downstream>>>,
+    group_downstreams: HashMap<u32, Arc<Mutex<Downstream<L>>>>,
     /// Downstreams that are HOM
-    hom_downstreams: HashMap<u32, Arc<Mutex<Downstream>>>,
+    hom_downstreams: HashMap<u32, Arc<Mutex<Downstream<L>>>>,
     hom_ids: Arc<Mutex<Id>>,
     group_ids: Arc<Mutex<Id>>,
     job_creators: Arc<Mutex<JobsCreators>>,
@@ -288,9 +294,10 @@ pub struct Pool {
     extranonces: Arc<Mutex<ExtendedExtranonce>>,
     solution_sender: Sender<SubmitSolution<'static>>,
     new_template_processed: bool,
+    logger: Arc<L>,
 }
 
-impl Downstream {
+impl<L: 'static + Deref + Debug + Send> Downstream<L> where L::Target: Logger, L: Sync {
     pub fn check_target(
         &mut self,
         channel_id: u32,
@@ -327,7 +334,8 @@ impl Downstream {
         extranonces: Arc<Mutex<ExtendedExtranonce>>,
         last_new_prev_hash: Option<SetNewPrevHash<'static>>,
         solution_sender: Sender<SubmitSolution<'static>>,
-        pool: Arc<Mutex<Pool>>,
+        pool: Arc<Mutex<Pool<L>>>,
+        logger: Arc<L>,
     ) -> Arc<Mutex<Self>> {
         let setup_connection = Arc::new(Mutex::new(SetupConnectionHandler::new()));
         let downstream_data =
@@ -341,6 +349,7 @@ impl Downstream {
                 panic!("Downstream standard channel not supported");
             }
         };
+
         let extended_jobs = job_creators
             .safe_lock(|j| {
                 j.new_group_channel(id, downstream_data.version_rolling)
@@ -386,6 +395,7 @@ impl Downstream {
             last_valid_extended_job,
             solution_sender,
             prefixes: HashMap::new(),
+            logger,
         }));
 
         for job in extended_jobs {
@@ -556,16 +566,16 @@ impl Downstream {
         Ok(())
     }
 }
-impl IsDownstream for Downstream {
+impl<L: 'static + Deref + Debug + Send> IsDownstream for Downstream<L> where L::Target: Logger, L: Sync {
     fn get_downstream_mining_data(&self) -> CommonDownstreamData {
         self.downstream_data
     }
 }
 
-impl IsMiningDownstream for Downstream {}
+impl<L: 'static + Deref + Debug + Send> IsMiningDownstream for Downstream<L> where L::Target: Logger, L: Sync {}
 
-impl Pool {
-    async fn accept_incoming_connection(self_: Arc<Mutex<Pool>>, config: Configuration) {
+impl<L: 'static + Deref + Debug + Send> Pool<L> where L::Target: Logger, L: Sync {
+    async fn accept_incoming_connection(self_: Arc<Mutex<Pool<L>>>, config: Configuration) {
         let listner = TcpListener::bind(&config.listen_address).await.unwrap();
         while let Ok((stream, _)) = listner.accept().await {
             let solution_sender = self_.safe_lock(|p| p.solution_sender.clone()).unwrap();
@@ -582,6 +592,8 @@ impl Pool {
             let hom_ids = self_.safe_lock(|s| s.hom_ids.clone()).unwrap();
             let job_creators = self_.safe_lock(|s| s.job_creators.clone()).unwrap();
             let extranonces = self_.safe_lock(|s| s.extranonces.clone()).unwrap();
+            let logger = self_.safe_lock(|s| s.logger.clone()).unwrap();
+
             let downstream = Downstream::new(
                 receiver,
                 sender,
@@ -592,6 +604,7 @@ impl Pool {
                 last_new_prev_hash,
                 solution_sender,
                 self_.clone(),
+                logger,
             )
             .await;
 
@@ -629,10 +642,10 @@ impl Pool {
             self_
                 .safe_lock(|s| s.last_new_prev_hash = Some(new_prev_hash.clone()))
                 .unwrap();
-            let hom_downstreams: Vec<Arc<Mutex<Downstream>>> = self_
+            let hom_downstreams: Vec<Arc<Mutex<Downstream<L>>>> = self_
                 .safe_lock(|s| s.hom_downstreams.iter().map(|d| d.1.clone()).collect())
                 .unwrap();
-            let group_downstreams: Vec<Arc<Mutex<Downstream>>> = self_
+            let group_downstreams: Vec<Arc<Mutex<Downstream<L>>>> = self_
                 .safe_lock(|s| s.group_downstreams.iter().map(|d| d.1.clone()).collect())
                 .unwrap();
             for downstream in [&hom_downstreams[..], &group_downstreams[..]].concat() {
@@ -666,7 +679,7 @@ impl Pool {
             let mut new_jobs = job_creators
                 .safe_lock(|j| j.on_new_template(&mut new_template).unwrap())
                 .unwrap();
-            let group_downstreams: Vec<Arc<Mutex<Downstream>>> = self_
+            let group_downstreams: Vec<Arc<Mutex<Downstream<L>>>> = self_
                 .safe_lock(|s| s.group_downstreams.iter().map(|d| d.1.clone()).collect())
                 .unwrap();
             // TODO add standard channel downstream
@@ -689,11 +702,13 @@ impl Pool {
     }
 
     pub async fn start(
+        logger: Arc<L>,
         config: Configuration,
         new_template_rx: Receiver<NewTemplate<'static>>,
         new_prev_hash_rx: Receiver<SetNewPrevHash<'static>>,
         solution_sender: Sender<SubmitSolution<'static>>,
     ) {
+        log_info!(logger, "Starting mining pool");
         //let group_id_generator = Arc::new(Mutex::new(Id::new()));
         let range_0 = std::ops::Range { start: 0, end: 0 };
         let range_1 = std::ops::Range { start: 0, end: 16 };
@@ -712,6 +727,7 @@ impl Pool {
             ))),
             solution_sender,
             new_template_processed: false,
+            logger
         }));
 
         let cloned = pool.clone();

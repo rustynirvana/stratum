@@ -9,7 +9,7 @@ use roles_logic_sv2::{
 };
 use std::{ops::Deref, sync::Arc};
 
-impl<L: Deref> ParseServerTemplateDistributionMessages for TemplateRx<L>
+impl<L: Deref + Send> ParseServerTemplateDistributionMessages for TemplateRx<L>
 where
     L::Target: Logger,
 {

@@ -103,10 +103,12 @@ mod args {
     }
 }
 
+#[derive(Debug)]
 struct TrackingLogger {
     /// (module, message) -> count
     pub lines: Mutex<HashMap<(String, String), usize>>,
 }
+
 impl Logger for TrackingLogger {
     fn log(&self, record: &Record) {
         *self
@@ -150,12 +152,16 @@ async fn main() {
 
     log_info!(logger, "Starting pool - WITH LOGGER");
 
+
     let (s_new_t, r_new_t) = bounded(10);
     let (s_prev_hash, r_prev_hash) = bounded(10);
     let (s_solution, r_solution) = bounded(10);
     println!("POOL INTITIALIZING ");
+
+    let logger = Arc::new(logger);
+
     TemplateRx::connect(
-        Arc::new(logger),
+        logger.clone(),
         config.tp_address.parse().unwrap(),
         s_new_t,
         s_prev_hash,
@@ -163,5 +169,7 @@ async fn main() {
     )
     .await;
     println!("POOL INITIALIZED");
-    Pool::start(config, r_new_t, r_prev_hash, s_solution).await;
+
+    Pool::start(logger.clone(),
+                        config, r_new_t, r_prev_hash, s_solution).await;
 }
