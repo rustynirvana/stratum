@@ -12,11 +12,12 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
+use std::ops::Deref;
 
 mod lib;
 
 use lib::{mining_pool::Pool, template_receiver::TemplateRx};
-use logging_sv2::{log_given_level, log_info, log_internal, Level, Logger, Record};
+use logging_sv2::{log_given_level, log_info, log_internal, Level, Logger, Record, log_debug, log_trace, log_gossip};
 
 pub type Message = PoolMessages<'static>;
 pub type StdFrame = StandardSv2Frame<Message>;
@@ -125,6 +126,21 @@ impl Logger for TrackingLogger {
             record.line,
             record.args
         );
+
+        #[cfg(feature = "max_level_warn")]  {
+            println!("IT'S SET HERE");
+        }
+
+
+    }
+}
+
+// Implement deref for trackingLogger
+impl Deref for TrackingLogger {
+    type Target = dyn Logger;
+
+    fn deref(&self) -> &Self::Target {
+        self
     }
 }
 
@@ -150,15 +166,13 @@ async fn main() {
         lines: Mutex::new(HashMap::new()),
     };
 
-    log_info!(logger, "Starting pool - WITH LOGGER");
-
-
     let (s_new_t, r_new_t) = bounded(10);
     let (s_prev_hash, r_prev_hash) = bounded(10);
     let (s_solution, r_solution) = bounded(10);
-    println!("POOL INTITIALIZING ");
 
     let logger = Arc::new(logger);
+
+    log_info!(logger, "Starting pool - WITH LOGGER");
 
     TemplateRx::connect(
         logger.clone(),

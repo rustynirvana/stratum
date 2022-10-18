@@ -237,6 +237,18 @@ mod tests {
             self.level = level;
         }
 
+        /// Search for the number of occurrence of the logged lines which
+        /// 1. belongs to the specified module and
+        /// 2. contains `line` in it.
+        /// And asserts if the number of occurrences is the same with the given `count`
+        pub fn assert_log_contains(&self, module: String, line: String, count: usize) {
+            let log_entries = self.lines.lock().unwrap();
+            let l: usize = log_entries.iter().filter(|&(&(ref m, ref l), _c)| {
+                m == &module && l.contains(line.as_str())
+            }).map(|(_, c) | { c }).sum();
+            assert_eq!(l, count)
+        }
+
         fn assert_log(&self, module: String, line: String, count: usize) {
             let log_entries = self.lines.lock().unwrap();
             assert_eq!(log_entries.get(&(module, line)), Some(&count));
@@ -306,21 +318,80 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(feature = "max_level_off", feature = "max_level_error")))]
     fn test_logging_levels_to_records() {
         let mut logger = TestLogger::new();
-        logger.enable(Level::Info);
-        log_info!(logger, "This is an info");
+        logger.enable(Level::Error);
+        log_error!(logger, "This is an error");
         logger.assert_log(
             "logging_sv2::tests".to_string(),
-            "This is an info".to_string(),
+            "This is an error".to_string(),
             1,
         );
-        log_trace!(logger, "This is a trace");
+        log_warn!(logger, "This is a trace");
         //This seems wrong but it's up to the implementer of the logger to decide what to do with the records
         logger.assert_log(
             "logging_sv2::tests".to_string(),
             "This is a trace".to_string(),
             1,
+        );
+    }
+
+    #[test]
+    fn test_features() {
+        let logger = TestLogger::new();
+        let not_exist = "Should not exist";
+        let exist = "Should exist";
+
+        #[cfg(feature = "max_level_warn")] {
+            log_info!(logger, "{}", not_exist);
+            log_debug!(logger, "{}", not_exist);
+            log_trace!(logger, "{}", not_exist);
+            log_gossip!(logger, "{}", not_exist);
+
+            log_warn!(logger, "{}", exist);
+        }
+
+        #[cfg(feature = "max_level_error")]         {
+            log_info!(logger, "{}", not_exist);
+            log_debug!(logger, "{}", not_exist);
+            log_trace!(logger, "{}", not_exist);
+            log_gossip!(logger, "{}", not_exist);
+            log_warn!(logger, "{}", not_exist);
+
+            log_error!(logger, "{}", exist);
+        }
+        #[cfg(feature = "max_level_info")] {
+            log_debug!(logger, "{}", not_exist);
+            log_trace!(logger, "{}", not_exist);
+            log_gossip!(logger, "{}", not_exist);
+
+            log_info!(logger, "{}", exist);
+        }
+
+        #[cfg(feature = "max_level_debug")] {
+            log_trace!(logger, "{}", not_exist);
+            log_gossip!(logger, "{}", not_exist);
+
+            log_debug!(logger, "{}", exist);
+        }
+
+        #[cfg(feature = "max_level_trace")] {
+            log_gossip!(logger, "{}", not_exist);
+
+            log_trace!(logger, "{}", exist);
+        }
+
+        logger.assert_log_contains(
+            "logging_sv2::tests".to_string(),
+            exist.to_string(),
+            1,
+        );
+
+        logger.assert_log_contains(
+            "logging_sv2::tests".to_string(),
+            not_exist.to_string(),
+            0,
         );
     }
 

@@ -13,7 +13,7 @@ use roles_logic_sv2::{
 use std::{convert::TryInto, sync::Arc};
 use std::fmt::Debug;
 use std::ops::Deref;
-use logging::Logger;
+use logging_sv2::{log_given_level, log_internal, log_trace, Level, Logger, Record};
 
 // [h/s] Expected hash rate of the device (or cumulative hashrate on the
 // channel if multiple devices are connected downstream) in h/s.
@@ -61,6 +61,14 @@ where L::Target: Logger, L: Sync
             .extranonces
             .safe_lock(|e| e.next_standard().unwrap().into_b032())
             .unwrap();
+        log_trace!(
+            self.logger,
+            "OpenStandardMiningChannel: request_id: {}, target: {:?}, extranonce_prefix: {:?}",
+            request_id,
+            target,
+            extranonce_prefix
+        );
+
         let message = match (self.downstream_data.header_only, self.id) {
             (false, group_channel_id) => {
                 let channel_id = self.channel_ids.next();
@@ -68,6 +76,9 @@ where L::Target: Logger, L: Sync
                     u256_to_uint_256(target.clone()),
                     extranonce_prefix.clone().to_vec(),
                 );
+
+                log_trace!(self.logger, "Creating new job for group_channel_id: {}", group_channel_id);
+
                 match (
                     &self.last_valid_extended_job,
                     &self.last_prev_hash,
@@ -107,6 +118,9 @@ where L::Target: Logger, L: Sync
                     u256_to_uint_256(target.clone()),
                     extranonce_prefix.clone().to_vec(),
                 );
+
+                log_trace!(self.logger, "Creating new job for channel_id: {}", channel_id);
+
                 match (
                     &self.last_valid_extended_job,
                     &self.last_prev_hash,
@@ -136,12 +150,14 @@ where L::Target: Logger, L: Sync
                 OpenStandardMiningChannelSuccess {
                     request_id: request_id.into(),
                     channel_id,
-                    group_channel_id: crate::HOM_GROUP_ID,
                     target,
                     extranonce_prefix,
+                    group_channel_id: crate::HOM_GROUP_ID,
                 }
             }
         };
+
+        log_trace!(self.logger, "Sending OpenStandardMiningChannelSuccess: {:?}", message);
         Ok(SendTo::Respond(Mining::OpenStandardMiningChannelSuccess(
             message,
         )))

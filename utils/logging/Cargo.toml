@@ -7,3 +7,10 @@ edition = "2021"
 
 [dependencies]
 
+[features]
+max_level_off = []
+max_level_error = []
+max_level_warn = []
+max_level_info = []
+max_level_debug = []
+max_level_trace = []

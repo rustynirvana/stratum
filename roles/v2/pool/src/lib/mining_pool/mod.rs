@@ -13,7 +13,7 @@ use bitcoin::{
     TxMerkleNode,
 };
 use codec_sv2::Frame;
-use logging::{log_given_level, log_info, log_internal, Level, Logger, Record};
+use logging_sv2::{log_given_level, log_info, log_internal, Level, Logger, Record};
 
 use roles_logic_sv2::{
     common_properties::{CommonDownstreamData, IsDownstream, IsMiningDownstream},
@@ -29,7 +29,6 @@ use roles_logic_sv2::{
 use std::{collections::HashMap, convert::TryInto, sync::Arc};
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::{MutexGuard, PoisonError};
 
 pub fn u256_to_block_hash(v: U256<'static>) -> BlockHash {
     let hash: [u8; 32] = v.to_vec().try_into().unwrap();
